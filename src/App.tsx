@@ -25,18 +25,12 @@ ChartJS.register(
 const gaussianQuadrature = (
   f: (x: number) => number,
   a: number,
-  b: number,
-  points: number
+  b: number
 ): number => {
-  // Generate weights and nodes dynamically for given number of points
-  const weightsAndNodes = {
-    2: {
-      weights: [1, 1],
-      nodes: [-1 / Math.sqrt(3), 1 / Math.sqrt(3)],
-    },
-  };
+  // Two-point Gaussian quadrature weights and nodes
+  const weights = [1, 1];
+  const nodes = [-1 / Math.sqrt(3), 1 / Math.sqrt(3)];
 
-  const { weights, nodes } = weightsAndNodes[points];
   const midpoint = (a + b) / 2;
   const halfLength = (b - a) / 2;
 
@@ -49,110 +43,83 @@ const gaussianQuadrature = (
   );
 };
 
-// Function definitions
-const piecewiseK = (x: number): number => (x <= 1 ? 1 : 2);
-const basisFunction = (i: number, x: number, h: number): number => {
-  if (x < h * (i - 1) || x > h * (i + 1)) return 0;
-  if (x < h * i) return x / h - i + 1;
-  return -(x / h) + i + 1;
-};
-const basisFunctionDerivative = (i: number, x: number, h: number): number => {
-  if (x < h * (i - 1) || x > h * (i + 1)) return 0;
-  if (x < h * i) return 1 / h;
-  return -1 / h;
-};
-
-const assembleMatrix = (
-  n: number,
-  h: number,
-  integrator: (
-    f: (x: number) => number,
-    a: number,
-    b: number,
-    points: number
-  ) => number
-): number[][] => {
-  const matrix = Array.from({ length: n }, () => Array(n).fill(0));
-
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      let a = Math.max(0, (i - 1) * h);
-      let b = Math.min(2, (i + 1) * h);
-
-      const integrand = (x: number) =>
-        piecewiseK(x) *
-        basisFunctionDerivative(i, x, h) *
-        basisFunctionDerivative(j, x, h);
-
-      matrix[i][j] = integrator(integrand, a, b, 2);
-    }
-  }
-  return matrix;
-};
-
-const assembleVector = (
-  n: number,
-  h: number,
-  integrator: (
-    f: (x: number) => number,
-    a: number,
-    b: number,
-    points: number
-  ) => number
-): number[] => {
-  const vector = Array(n).fill(0);
-  for (let i = 0; i < n; i++) {
-    vector[i] = -20 * basisFunction(i, 0, h);
-  }
-  vector[n - 1] = 3; // Dirichlet condition
-  return vector;
-};
-
-const solveSystem = (matrix: number[][], vector: number[]): number[] => {
-  const size = matrix.length;
-  const x = Array(size).fill(0);
-
-  for (let i = 0; i < size; i++) {
-    let maxRow = i;
-    for (let k = i + 1; k < size; k++) {
-      if (Math.abs(matrix[k][i]) > Math.abs(matrix[maxRow][i])) {
-        maxRow = k;
-      }
-    }
-
-    [matrix[i], matrix[maxRow]] = [matrix[maxRow], matrix[i]];
-    [vector[i], vector[maxRow]] = [vector[maxRow], vector[i]];
-
-    for (let k = i + 1; k < size; k++) {
-      const factor = matrix[k][i] / matrix[i][i];
-      for (let j = i; j < size; j++) {
-        matrix[k][j] -= factor * matrix[i][j];
-      }
-      vector[k] -= factor * vector[i];
-    }
-  }
-
-  for (let i = size - 1; i >= 0; i--) {
-    let sum = 0;
-    for (let j = i + 1; j < size; j++) {
-      sum += matrix[i][j] * x[j];
-    }
-    x[i] = (vector[i] - sum) / matrix[i][i];
-  }
-
-  return x;
-};
-
+// Finite Element Method implementation
 const solveHeatTransport = (n: number): { x: number[]; u: number[] } => {
-  const h = 2 / n;
+  const k = (x: number) => (x <= 1 ? 1 : 2); // Piecewise k(x)
+  const length = 2;
+  const h = length / n;
+
+  // Nodes
   const nodes = Array.from({ length: n + 1 }, (_, i) => i * h);
 
-  const matrix = assembleMatrix(n, h, gaussianQuadrature);
-  const vector = assembleVector(n, h, gaussianQuadrature);
+  // Stiffness matrix and load vector
+  const K = Array.from({ length: n + 1 }, () => Array(n + 1).fill(0));
+  const F = Array(n + 1).fill(0);
 
-  const solution = solveSystem(matrix, vector);
+  // Assemble stiffness matrix and load vector
+  for (let i = 0; i < n; i++) {
+    const x1 = nodes[i];
+    const x2 = nodes[i + 1];
 
-  return { x: nodes, u: [...solution, 0] };
+    const stiffnessLocal = [
+      [1 / h, -1 / h],
+      [-1 / h, 1 / h],
+    ];
+
+    for (let a = 0; a < 2; a++) {
+      for (let b = 0; b < 2; b++) {
+        const integrand = (x: number) => k(x) * stiffnessLocal[a][b];
+        const integral = gaussianQuadrature(integrand, x1, x2);
+        K[i + a][i + b] += integral;
+      }
+    }
+  }
+
+  // Apply boundary conditions
+  K[n][n] = 1;
+  F[n] = 3; // u(2) = 3
+
+  F[0] += 20; // du(0)/dx + u(0) = 20
+
+  // Solve the linear system
+  const solveLinearSystem = (A: number[][], b: number[]): number[] => {
+    const size = A.length;
+    const x = Array(size).fill(0);
+
+    for (let i = 0; i < size; i++) {
+      let maxRow = i;
+      for (let k = i + 1; k < size; k++) {
+        if (Math.abs(A[k][i]) > Math.abs(A[maxRow][i])) {
+          maxRow = k;
+        }
+      }
+
+      [A[i], A[maxRow]] = [A[maxRow], A[i]];
+      [b[i], b[maxRow]] = [b[maxRow], b[i]];
+
+      for (let k = i + 1; k < size; k++) {
+        const factor = A[k][i] / A[i][i];
+        for (let j = i; j < size; j++) {
+          A[k][j] -= factor * A[i][j];
+        }
+        b[k] -= factor * b[i];
+      }
+    }
+
+    for (let i = size - 1; i >= 0; i--) {
+      let sum = 0;
+      for (let j = i + 1; j < size; j++) {
+        sum += A[i][j] * x[j];
+      }
+      x[i] = (b[i] - sum) / A[i][i];
+    }
+
+    return x;
+  };
+
+  const u = solveLinearSystem(K, F);
+
+  return { x: nodes, u };
 };
 
 const App: React.FC = () => {
@@ -169,6 +136,20 @@ const App: React.FC = () => {
         backgroundColor: "rgba(75,192,192,0.2)",
       },
     ],
+  };
+
+  const options = {
+    scales: {
+      y: {
+        min: -30,
+        max: 70,
+        ticks: {
+          stepSize: 10,
+        },
+      },
+    },
+    maintainAspectRatio: true,
+    responsive: true,
   };
 
   return (
@@ -204,7 +185,7 @@ const App: React.FC = () => {
             }}
           />
         </div>
-        <Line data={data} />
+        <Line data={data} options={options} />
       </div>
     </div>
   );
