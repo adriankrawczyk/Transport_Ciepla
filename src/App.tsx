@@ -137,20 +137,41 @@ const App: React.FC = () => {
       },
     ],
   };
-
   return (
-    <div>
-      <h1>Heat Transport Solver</h1>
-      <div>
-        <label htmlFor="n">Number of elements (n): </label>
-        <input
-          id="n"
-          type="number"
-          value={n}
-          onChange={(e) => setN(Number(e.target.value))}
-        />
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        height: "100vh",
+        backgroundColor: "#f4f4f9",
+      }}
+    >
+      <div
+        style={{
+          textAlign: "center",
+          padding: "20px",
+          background: "white",
+          borderRadius: "8px",
+          boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
+        }}
+      >
+        <h1>Heat Transport Solver</h1>
+        <div>
+          <label htmlFor="n">Number of elements (n): </label>
+          <input
+            id="n"
+            type="number"
+            min="1"
+            value={n}
+            onChange={(e) => {
+              const value = Math.max(1, Number(e.target.value));
+              setN(value);
+            }}
+          />
+        </div>
+        <Line data={data} />
       </div>
-      <Line data={data} />
     </div>
   );
 };
