@@ -21,14 +21,16 @@ ChartJS.register(
   Legend
 );
 
-const App = () => {
-  const [elements, setElements] = useState(10);
+import "./App.css";
+
+const App: React.FC = () => {
+  const [elements, setElements] = useState<number>(10);
 
   // Helper functions
   const k = (x: number): number => {
     if (x >= 0 && x <= 1) return 1;
     if (x > 1 && x <= 2) return 2;
-    throw new Error("Wrong k function argument!");
+    throw new Error("Invalid k function argument!");
   };
 
   const e = (i: number, x: number, h: number): number => {
@@ -43,12 +45,10 @@ const App = () => {
     return -1 / h;
   };
 
-  // Improved Gaussian quadrature integration
   const integrate = (
     f: (x: number) => number,
     a: number,
-    b: number,
-    n: number = 30
+    b: number
   ): number => {
     const weights = [
       0.2955242247147529, 0.2955242247147529, 0.2692667193099963,
@@ -89,7 +89,6 @@ const App = () => {
       .map(() => Array(elements).fill(0));
     const vector: number[] = Array(elements).fill(0);
 
-    // Assemble matrix
     for (let i = 0; i < elements; i++) {
       for (let j = 0; j < elements; j++) {
         let a = 0.0,
@@ -109,15 +108,13 @@ const App = () => {
       }
     }
 
-    // Assemble vector
     for (let i = 0; i < elements - 1; i++) {
       vector[i] = L(i, h);
     }
-    vector[elements - 1] = 3.0; // Dirichlet boundary condition
+    vector[elements - 1] = 3.0;
 
-    // Solve system using Gaussian elimination
     const solution = gaussianElimination(matrix, vector);
-    solution.push(0); // Add final point
+    solution.push(0);
 
     return {
       x: Array.from({ length: elements + 1 }, (_, i) => h * i),
@@ -127,11 +124,10 @@ const App = () => {
 
   const gaussianElimination = (A: number[][], b: number[]): number[] => {
     const n = A.length;
-    const x = Array(n).fill(0);
+    const x: number[] = Array(n).fill(0);
     const augMatrix = A.map((row, i) => [...row, b[i]]);
 
     for (let i = 0; i < n; i++) {
-      // Partial pivoting
       let maxRow = i;
       for (let j = i + 1; j < n; j++) {
         if (Math.abs(augMatrix[j][i]) > Math.abs(augMatrix[maxRow][i])) {
@@ -140,7 +136,6 @@ const App = () => {
       }
       [augMatrix[i], augMatrix[maxRow]] = [augMatrix[maxRow], augMatrix[i]];
 
-      // Elimination
       for (let j = i + 1; j < n; j++) {
         const factor = augMatrix[j][i] / augMatrix[i][i];
         for (let k = i; k <= n; k++) {
@@ -149,7 +144,6 @@ const App = () => {
       }
     }
 
-    // Back substitution
     for (let i = n - 1; i >= 0; i--) {
       let sum = augMatrix[i][n];
       for (let j = i + 1; j < n; j++) {
@@ -171,16 +165,50 @@ const App = () => {
         data: solution.y,
         borderColor: "rgb(75, 192, 192)",
         tension: 0.1,
+        pointRadius: 3,
+        backgroundColor: "rgba(75, 192, 192, 0.2)",
       },
     ],
+  };
+  const handleElementsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    // Allow empty input for better typing experience
+    if (value === "") {
+      setElements(2);
+      return;
+    }
+
+    const numValue = parseInt(value);
+
+    // Validate the input
+    if (!isNaN(numValue)) {
+      // Clamp value between 2 and 50
+      const clampedValue = Math.min(Math.max(numValue, 2), 50);
+      setElements(clampedValue);
+    }
   };
 
   const options = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       title: {
         display: true,
         text: "Heat Transport Solution",
+        font: {
+          size: 20,
+          weight: "bold" as const,
+        },
+        color: "#333",
+      },
+      legend: {
+        position: "top" as const,
+        labels: {
+          font: {
+            size: 14,
+          },
+        },
       },
     },
     scales: {
@@ -190,38 +218,47 @@ const App = () => {
         title: {
           display: true,
           text: "Temperature",
+          font: {
+            size: 14,
+          },
         },
       },
       x: {
         title: {
           display: true,
           text: "Position",
+          font: {
+            size: 14,
+          },
         },
       },
     },
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
-      <div className="w-full max-w-4xl bg-white rounded-lg shadow-lg p-6">
-        <h1 className="text-2xl font-bold mb-4 text-center">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-100 to-gray-300 p-6">
+      <div className="w-full max-w-4xl bg-white rounded-lg shadow-md p-8">
+        <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
           Heat Transport Solver
         </h1>
-        <div className="mb-4 flex justify-center items-center gap-2">
-          <label htmlFor="elements">Number of elements:</label>
+        <div className="mb-6 flex justify-center items-center gap-4">
+          <label
+            htmlFor="elements"
+            className="text-lg font-medium text-gray-700"
+          >
+            Number of elements:
+          </label>
           <input
             id="elements"
             type="number"
             min="2"
             max="50"
-            value={elements}
-            onChange={(e) =>
-              setElements(Math.max(2, parseInt(e.target.value) || 2))
-            }
-            className="border rounded px-2 py-1 w-20"
+            value={elements === 2 ? "" : elements}
+            onChange={handleElementsChange}
+            className="border rounded-lg px-3 py-2 w-24 text-gray-700 focus:ring focus:ring-blue-300 focus:outline-none"
           />
         </div>
-        <div className="aspect-[2/1] w-full">
+        <div className="flex items-center justify-center aspect-[2/1] w-full">
           <Line data={data} options={options} />
         </div>
       </div>
