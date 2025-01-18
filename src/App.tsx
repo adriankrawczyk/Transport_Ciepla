@@ -253,13 +253,15 @@ const App: React.FC = () => {
             type="number"
             min="2"
             max="50"
-            value={elements === 2 ? "" : elements}
-            onChange={handleElementsChange}
+            value={elements}
+            onChange={(e) =>
+              setElements(Math.max(2, parseInt(e.target.value) || 2))
+            }
             className="border rounded-lg px-3 py-2 w-24 text-gray-700 focus:ring focus:ring-blue-300 focus:outline-none"
           />
         </div>
-        <div className="flex items-center justify-center aspect-[2/1] w-full">
-          <Line data={data} options={options} />
+        <div className="relative w-full" style={{ height: "50vh" }}>
+          <Line className="h-full" data={data} options={options} />
         </div>
       </div>
     </div>
