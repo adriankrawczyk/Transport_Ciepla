@@ -25,31 +25,34 @@ import "./App.css";
 
 const App: React.FC = () => {
   const [elements, setElements] = useState<number>(10);
-
-  // Helper functions
+  // Helper function to define the k(x) coefficient
   const k = (x: number): number => {
-    if (x >= 0 && x <= 1) return 1;
-    if (x > 1 && x <= 2) return 2;
-    throw new Error("Invalid k function argument!");
+    if (x >= 0 && x <= 1) return 1; // k(x) = 1 for 0 <= x <= 1
+    if (x > 1 && x <= 2) return 2; // k(x) = 2 for 1 < x <= 2
+    throw new Error("Invalid k function argument!"); // Error for out-of-bound values
   };
 
+  // Helper function to define the basis function e(i, x, h)
   const e = (i: number, x: number, h: number): number => {
-    if (x < h * (i - 1) || x > h * (i + 1)) return 0;
-    if (x < h * i) return x / h - i + 1;
-    return -x / h + i + 1;
+    if (x < h * (i - 1) || x > h * (i + 1)) return 0; // e(i, x) is 0 outside the support
+    if (x < h * i) return x / h - i + 1; // e(i, x) for x < h * i
+    return -x / h + i + 1; // e(i, x) for x >= h * i
   };
 
+  // Helper function for the derivative of the basis function e'(i, x, h)
   const ePrim = (i: number, x: number, h: number): number => {
-    if (x < h * (i - 1) || x > h * (i + 1)) return 0;
-    if (x < h * i) return 1 / h;
-    return -1 / h;
+    if (x < h * (i - 1) || x > h * (i + 1)) return 0; // e'(i, x) is 0 outside the support
+    if (x < h * i) return 1 / h; // e'(i, x) for x < h * i
+    return -1 / h; // e'(i, x) for x >= h * i
   };
 
+  // Helper function to perform numerical integration using Gaussian quadrature
   const integrate = (
-    f: (x: number) => number,
-    a: number,
-    b: number
+    f: (x: number) => number, // Function to integrate
+    a: number, // Lower bound of integration
+    b: number // Upper bound of integration
   ): number => {
+    // Predefined weights and nodes for 10-point Gaussian quadrature
     const weights = [
       0.2955242247147529, 0.2955242247147529, 0.2692667193099963,
       0.2692667193099963, 0.219086362515982, 0.219086362515982,
@@ -63,9 +66,10 @@ const App: React.FC = () => {
       0.9739065285171717,
     ];
 
-    const mid = (a + b) / 2;
-    const scale = (b - a) / 2;
+    const mid = (a + b) / 2; // Midpoint of the interval
+    const scale = (b - a) / 2; // Scaling factor for interval transformation
 
+    // Sum over weighted function evaluations at transformed nodes
     return (
       scale *
       weights.reduce(
@@ -75,25 +79,32 @@ const App: React.FC = () => {
     );
   };
 
+  // Helper function to compute the stiffness matrix entries
   const B = (i: number, j: number, a: number, b: number, h: number): number => {
+    // Integrand for the stiffness matrix entry
     const integrand = (x: number) => k(x) * ePrim(i, x, h) * ePrim(j, x, h);
+    // Numerical integration and boundary term correction
     return integrate(integrand, a, b) - e(i, 0, h) * e(j, 0, h);
   };
 
+  // Helper function to compute the load vector entries
   const L = (i: number, h: number): number => -20.0 * e(i, 0, h);
 
+  // Main function to solve the system of equations
   const solve = () => {
-    const h = 2.0 / elements;
+    const h = 2.0 / elements; // Step size for subdivision
     const matrix: number[][] = Array(elements)
       .fill(0)
-      .map(() => Array(elements).fill(0));
-    const vector: number[] = Array(elements).fill(0);
+      .map(() => Array(elements).fill(0)); // Initialize stiffness matrix
+    const vector: number[] = Array(elements).fill(0); // Initialize load vector
 
+    // Assemble the stiffness matrix
     for (let i = 0; i < elements; i++) {
       for (let j = 0; j < elements; j++) {
         let a = 0.0,
           b = 0.0;
 
+        // Determine integration bounds based on overlap of basis functions
         if (Math.abs(i - j) === 1) {
           a = 2.0 * Math.max(0.0, Math.min(i, j) / elements);
           b = 2.0 * Math.min(1.0, Math.max(i, j) / elements);
@@ -101,40 +112,45 @@ const App: React.FC = () => {
           a = 2.0 * Math.max(0.0, (i - 1.0) / elements);
           b = 2.0 * Math.min(1.0, (i + 1.0) / elements);
         } else {
-          continue;
+          continue; // Non-overlapping basis functions contribute 0
         }
 
         matrix[i][j] = B(i, j, a, b, h);
       }
     }
 
+    // Assemble the load vector
     for (let i = 0; i < elements - 1; i++) {
       vector[i] = L(i, h);
     }
-    vector[elements - 1] = 3.0;
+    vector[elements - 1] = 3.0; // Boundary condition at the last node
 
+    // Solve the system using Gaussian elimination
     const solution = gaussianElimination(matrix, vector);
-    solution.push(0);
+    solution.push(0); // Enforce boundary condition at x = 0
 
+    // Return computed x and y values for visualization
     return {
       x: Array.from({ length: elements + 1 }, (_, i) => h * i),
       y: solution,
     };
   };
 
+  // Function to perform Gaussian elimination
   const gaussianElimination = (A: number[][], b: number[]): number[] => {
     const n = A.length;
     const x: number[] = Array(n).fill(0);
-    const augMatrix = A.map((row, i) => [...row, b[i]]);
+    const augMatrix = A.map((row, i) => [...row, b[i]]); // Augmented matrix
 
+    // Forward elimination
     for (let i = 0; i < n; i++) {
       let maxRow = i;
       for (let j = i + 1; j < n; j++) {
         if (Math.abs(augMatrix[j][i]) > Math.abs(augMatrix[maxRow][i])) {
-          maxRow = j;
+          maxRow = j; // Pivot selection
         }
       }
-      [augMatrix[i], augMatrix[maxRow]] = [augMatrix[maxRow], augMatrix[i]];
+      [augMatrix[i], augMatrix[maxRow]] = [augMatrix[maxRow], augMatrix[i]]; // Swap rows
 
       for (let j = i + 1; j < n; j++) {
         const factor = augMatrix[j][i] / augMatrix[i][i];
@@ -144,6 +160,7 @@ const App: React.FC = () => {
       }
     }
 
+    // Back substitution
     for (let i = n - 1; i >= 0; i--) {
       let sum = augMatrix[i][n];
       for (let j = i + 1; j < n; j++) {
@@ -253,10 +270,8 @@ const App: React.FC = () => {
             type="number"
             min="2"
             max="50"
-            value={elements}
-            onChange={(e) =>
-              setElements(Math.max(2, parseInt(e.target.value) || 2))
-            }
+            value={elements === 2 ? "" : elements}
+            onChange={handleElementsChange}
             className="border rounded-lg px-3 py-2 w-24 text-gray-700 focus:ring focus:ring-blue-300 focus:outline-none"
           />
         </div>
