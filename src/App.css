@@ -2,12 +2,13 @@
 #root > div,
 html,
 body {
-  width: 100%;
+  width: 99%;
   height: 100%;
 }
+
 body {
-  margin: 0;
   padding: 0;
+  overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
