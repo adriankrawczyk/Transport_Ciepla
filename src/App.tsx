@@ -253,7 +253,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-100 to-gray-300 p-6">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-white-300 to-white-600 p-6">
       <div className="w-full max-w-4xl bg-white rounded-lg shadow-md p-8">
         <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">
           Heat Transport Solver
