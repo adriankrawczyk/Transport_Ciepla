@@ -21,171 +21,209 @@ ChartJS.register(
   Legend
 );
 
-// Gaussian quadrature for numerical integration
-const gaussianQuadrature = (
-  f: (x: number) => number,
-  a: number,
-  b: number
-): number => {
-  // Two-point Gaussian quadrature weights and nodes
-  const weights = [1, 1];
-  const nodes = [-1 / Math.sqrt(3), 1 / Math.sqrt(3)];
+const App = () => {
+  const [elements, setElements] = useState(10);
 
-  const midpoint = (a + b) / 2;
-  const halfLength = (b - a) / 2;
+  // Helper functions
+  const k = (x: number): number => {
+    if (x >= 0 && x <= 1) return 1;
+    if (x > 1 && x <= 2) return 2;
+    throw new Error("Wrong k function argument!");
+  };
 
-  return (
-    halfLength *
-    nodes.reduce(
-      (sum, node, i) => sum + weights[i] * f(midpoint + node * halfLength),
-      0
-    )
-  );
-};
+  const e = (i: number, x: number, h: number): number => {
+    if (x < h * (i - 1) || x > h * (i + 1)) return 0;
+    if (x < h * i) return x / h - i + 1;
+    return -x / h + i + 1;
+  };
 
-// Finite Element Method implementation
-const solveHeatTransport = (n: number): { x: number[]; u: number[] } => {
-  const k = (x: number) => (x <= 1 ? 1 : 2); // Piecewise k(x)
-  const length = 2;
-  const h = length / n;
+  const ePrim = (i: number, x: number, h: number): number => {
+    if (x < h * (i - 1) || x > h * (i + 1)) return 0;
+    if (x < h * i) return 1 / h;
+    return -1 / h;
+  };
 
-  // Nodes
-  const nodes = Array.from({ length: n + 1 }, (_, i) => i * h);
-
-  // Stiffness matrix and load vector
-  const K = Array.from({ length: n + 1 }, () => Array(n + 1).fill(0));
-  const F = Array(n + 1).fill(0);
-
-  // Assemble stiffness matrix and load vector
-  for (let i = 0; i < n; i++) {
-    const x1 = nodes[i];
-    const x2 = nodes[i + 1];
-
-    const stiffnessLocal = [
-      [1 / h, -1 / h],
-      [-1 / h, 1 / h],
+  // Improved Gaussian quadrature integration
+  const integrate = (
+    f: (x: number) => number,
+    a: number,
+    b: number,
+    n: number = 30
+  ): number => {
+    const weights = [
+      0.2955242247147529, 0.2955242247147529, 0.2692667193099963,
+      0.2692667193099963, 0.219086362515982, 0.219086362515982,
+      0.1494513491505806, 0.1494513491505806, 0.0666713443086881,
+      0.0666713443086881,
+    ];
+    const nodes = [
+      -0.1488743389816312, 0.1488743389816312, -0.4333953941292472,
+      0.4333953941292472, -0.6794095682990244, 0.6794095682990244,
+      -0.8650633666889845, 0.8650633666889845, -0.9739065285171717,
+      0.9739065285171717,
     ];
 
-    for (let a = 0; a < 2; a++) {
-      for (let b = 0; b < 2; b++) {
-        const integrand = (x: number) => k(x) * stiffnessLocal[a][b];
-        const integral = gaussianQuadrature(integrand, x1, x2);
-        K[i + a][i + b] += integral;
+    const mid = (a + b) / 2;
+    const scale = (b - a) / 2;
+
+    return (
+      scale *
+      weights.reduce(
+        (sum, weight, i) => sum + weight * f(mid + scale * nodes[i]),
+        0
+      )
+    );
+  };
+
+  const B = (i: number, j: number, a: number, b: number, h: number): number => {
+    const integrand = (x: number) => k(x) * ePrim(i, x, h) * ePrim(j, x, h);
+    return integrate(integrand, a, b) - e(i, 0, h) * e(j, 0, h);
+  };
+
+  const L = (i: number, h: number): number => -20.0 * e(i, 0, h);
+
+  const solve = () => {
+    const h = 2.0 / elements;
+    const matrix: number[][] = Array(elements)
+      .fill(0)
+      .map(() => Array(elements).fill(0));
+    const vector: number[] = Array(elements).fill(0);
+
+    // Assemble matrix
+    for (let i = 0; i < elements; i++) {
+      for (let j = 0; j < elements; j++) {
+        let a = 0.0,
+          b = 0.0;
+
+        if (Math.abs(i - j) === 1) {
+          a = 2.0 * Math.max(0.0, Math.min(i, j) / elements);
+          b = 2.0 * Math.min(1.0, Math.max(i, j) / elements);
+        } else if (i === j) {
+          a = 2.0 * Math.max(0.0, (i - 1.0) / elements);
+          b = 2.0 * Math.min(1.0, (i + 1.0) / elements);
+        } else {
+          continue;
+        }
+
+        matrix[i][j] = B(i, j, a, b, h);
       }
     }
-  }
 
-  // Apply boundary conditions
-  K[n][n] = 1;
-  F[n] = 3; // u(2) = 3
+    // Assemble vector
+    for (let i = 0; i < elements - 1; i++) {
+      vector[i] = L(i, h);
+    }
+    vector[elements - 1] = 3.0; // Dirichlet boundary condition
 
-  F[0] += 20; // du(0)/dx + u(0) = 20
+    // Solve system using Gaussian elimination
+    const solution = gaussianElimination(matrix, vector);
+    solution.push(0); // Add final point
 
-  // Solve the linear system
-  const solveLinearSystem = (A: number[][], b: number[]): number[] => {
-    const size = A.length;
-    const x = Array(size).fill(0);
+    return {
+      x: Array.from({ length: elements + 1 }, (_, i) => h * i),
+      y: solution,
+    };
+  };
 
-    for (let i = 0; i < size; i++) {
+  const gaussianElimination = (A: number[][], b: number[]): number[] => {
+    const n = A.length;
+    const x = Array(n).fill(0);
+    const augMatrix = A.map((row, i) => [...row, b[i]]);
+
+    for (let i = 0; i < n; i++) {
+      // Partial pivoting
       let maxRow = i;
-      for (let k = i + 1; k < size; k++) {
-        if (Math.abs(A[k][i]) > Math.abs(A[maxRow][i])) {
-          maxRow = k;
+      for (let j = i + 1; j < n; j++) {
+        if (Math.abs(augMatrix[j][i]) > Math.abs(augMatrix[maxRow][i])) {
+          maxRow = j;
         }
       }
+      [augMatrix[i], augMatrix[maxRow]] = [augMatrix[maxRow], augMatrix[i]];
 
-      [A[i], A[maxRow]] = [A[maxRow], A[i]];
-      [b[i], b[maxRow]] = [b[maxRow], b[i]];
-
-      for (let k = i + 1; k < size; k++) {
-        const factor = A[k][i] / A[i][i];
-        for (let j = i; j < size; j++) {
-          A[k][j] -= factor * A[i][j];
+      // Elimination
+      for (let j = i + 1; j < n; j++) {
+        const factor = augMatrix[j][i] / augMatrix[i][i];
+        for (let k = i; k <= n; k++) {
+          augMatrix[j][k] -= factor * augMatrix[i][k];
         }
-        b[k] -= factor * b[i];
       }
     }
 
-    for (let i = size - 1; i >= 0; i--) {
-      let sum = 0;
-      for (let j = i + 1; j < size; j++) {
-        sum += A[i][j] * x[j];
+    // Back substitution
+    for (let i = n - 1; i >= 0; i--) {
+      let sum = augMatrix[i][n];
+      for (let j = i + 1; j < n; j++) {
+        sum -= augMatrix[i][j] * x[j];
       }
-      x[i] = (b[i] - sum) / A[i][i];
+      x[i] = sum / augMatrix[i][i];
     }
 
     return x;
   };
 
-  const u = solveLinearSystem(K, F);
-
-  return { x: nodes, u };
-};
-
-const App: React.FC = () => {
-  const [n, setN] = useState(10);
-  const { x, u } = solveHeatTransport(n);
+  const solution = solve();
 
   const data = {
-    labels: x,
+    labels: solution.x,
     datasets: [
       {
-        label: "u(x)",
-        data: u,
-        borderColor: "rgba(75,192,192,1)",
-        backgroundColor: "rgba(75,192,192,0.2)",
+        label: "Temperature Distribution",
+        data: solution.y,
+        borderColor: "rgb(75, 192, 192)",
+        tension: 0.1,
       },
     ],
   };
 
   const options = {
+    responsive: true,
+    plugins: {
+      title: {
+        display: true,
+        text: "Heat Transport Solution",
+      },
+    },
     scales: {
       y: {
         min: -30,
         max: 70,
-        ticks: {
-          stepSize: 10,
+        title: {
+          display: true,
+          text: "Temperature",
+        },
+      },
+      x: {
+        title: {
+          display: true,
+          text: "Position",
         },
       },
     },
-    maintainAspectRatio: true,
-    responsive: true,
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        height: "100vh",
-        backgroundColor: "#f4f4f9",
-      }}
-    >
-      <div
-        style={{
-          textAlign: "center",
-          padding: "20px",
-          background: "white",
-          borderRadius: "8px",
-          boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
-        }}
-      >
-        <h1>Heat Transport Solver</h1>
-        <div>
-          <label htmlFor="n">Number of elements (n): </label>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+      <div className="w-full max-w-4xl bg-white rounded-lg shadow-lg p-6">
+        <h1 className="text-2xl font-bold mb-4 text-center">
+          Heat Transport Solver
+        </h1>
+        <div className="mb-4 flex justify-center items-center gap-2">
+          <label htmlFor="elements">Number of elements:</label>
           <input
-            id="n"
+            id="elements"
             type="number"
-            min="1"
-            value={n}
-            onChange={(e) => {
-              const value = Math.max(1, Number(e.target.value));
-              setN(value);
-            }}
+            min="2"
+            max="50"
+            value={elements}
+            onChange={(e) =>
+              setElements(Math.max(2, parseInt(e.target.value) || 2))
+            }
+            className="border rounded px-2 py-1 w-20"
           />
         </div>
-        <Line data={data} options={options} />
+        <div className="aspect-[2/1] w-full">
+          <Line data={data} options={options} />
+        </div>
       </div>
     </div>
   );
