@@ -131,7 +131,10 @@ const App: React.FC = () => {
 
     // Return computed x and y values for visualization
     return {
-      x: Array.from({ length: elements + 1 }, (_, i) => h * i),
+      x: Array.from(
+        { length: elements + 1 },
+        (_, i) => Math.round(h * i * 10000) / 10000
+      ),
       y: solution,
     };
   };
@@ -192,7 +195,7 @@ const App: React.FC = () => {
 
     // Allow empty input for better typing experience
     if (value === "") {
-      setElements(2);
+      setElements(1);
       return;
     }
 
@@ -200,8 +203,8 @@ const App: React.FC = () => {
 
     // Validate the input
     if (!isNaN(numValue)) {
-      // Clamp value between 2 and 50
-      const clampedValue = Math.min(Math.max(numValue, 2), 50);
+      // Clamp value between 1 and 200
+      const clampedValue = Math.min(Math.max(numValue, 1), 200);
       setElements(clampedValue);
     }
   };
@@ -268,9 +271,9 @@ const App: React.FC = () => {
           <input
             id="elements"
             type="number"
-            min="2"
-            max="50"
-            value={elements === 2 ? "" : elements}
+            min="1"
+            max="200"
+            value={elements}
             onChange={handleElementsChange}
             className="border rounded-lg px-3 py-2 w-24 text-gray-700 focus:ring focus:ring-blue-300 focus:outline-none"
           />
